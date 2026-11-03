@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cork Notes</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Indie+Flower&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+:root{ --bg:#F7F9FC; --text:#0F172A; --muted:#64748B; --primary:#0EA5E9; --cork:#C49A6C; --cork-dark:#A57D4C; }
+*{ box-sizing:border-box; }
+html,body,#root{ height:100%; }
+body{ margin:0; font-family:Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial; background:var(--bg); color:var(--text); }
+
+.cb-app{ display:grid; grid-template-rows:64px 1fr 64px; height:100%; }
+.cb-top{ display:flex; align-items:center; justify-content:space-between; padding:0 16px; border-bottom:1px solid #E5E7EB; background:#fff; position:relative; z-index:5; gap:12px; }
+.cb-brand{ font-weight:800; letter-spacing:.3px; white-space:nowrap; }
+.cb-brand span{ color:var(--primary); }
+.cb-actions{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
+.cb-hello{ color:#64748B; align-self:center; padding:8px 0; margin-right:8px; }
+.cb-action{ padding:8px 12px; border:1px solid #E5E7EB; background:#fff; border-radius:10px; cursor:pointer; }
+.cb-action:hover{ filter:brightness(1.05); }
+
+.cb-main{ padding:16px; overflow:auto; position:relative; z-index:1; }
+.cb-empty{ display:flex; align-items:center; justify-content:center; height:100%; color:var(--muted); text-align:center; padding:0 16px; }
+
+.cb-stage{ perspective:1000px; }
+.cb-cork{ position:relative; min-height: calc(100vh - 64px - 64px - 32px); border-radius:18px; border:10px solid var(--cork-dark); box-shadow: inset 0 2px 8px rgba(0,0,0,.25); transform-style: preserve-3d; overflow:hidden; }
+.cb-cork.flip{ animation: flipY .5s ease both; }
+@keyframes flipY { from{ transform: rotateY(-90deg); opacity:.0; } to{ transform: rotateY(0); opacity:1; } }
+
+.cb-bottom{ position:relative; z-index:10; display:flex; align-items:center; justify-content:center; background:#fff; border-top:1px solid #E5E7EB; padding:8px; }
+.cb-board-template{ position:absolute; inset:22px; pointer-events:none; z-index:0; }
+.cb-board-template-grid{ display:grid; height:100%; border-top:3px solid rgba(255,255,255,.82); border-bottom:0; }
+.cb-board-column{ border-right:3px solid rgba(255,255,255,.82); min-width:0; }
+.cb-board-column:first-child{ border-left:0; }
+.cb-board-column:last-child{ border-right:0; }
+.cb-board-column-title{ height:56px; display:flex; align-items:center; justify-content:center; font-weight:800; color:rgba(255,255,255,.92); text-shadow:0 1px 2px rgba(0,0,0,.45); border-bottom:3px solid rgba(255,255,255,.82); }
+.cb-note{ z-index:2; }
+.cb-tabs{ display:flex; gap:8px; flex-wrap:wrap; }
+.cb-tab{ padding:8px 12px; border:1px solid #E5E7EB; border-radius:12px; background:#fff; cursor:pointer; user-select:none; display:flex; align-items:center; gap:8px; }
+.cb-tab.active{ background:var(--primary); color:#fff; border-color:transparent; }
+.cb-tab:focus{ outline:none; box-shadow:0 0 0 3px rgba(14,165,233,.35); }
+.cb-tab-ops{ display:flex; gap:6px; }
+.cb-mini{ width:22px; height:22px; border-radius:6px; border:none; background:rgba(0,0,0,.08); cursor:pointer; }
+
+.cb-note{ position:absolute; width:240px; min-width:200px; min-height:120px; padding:12px 12px 16px; border-radius:10px; box-shadow: 0 10px 20px rgba(0,0,0,.25), 0 2px 4px rgba(0,0,0,.15); transform: rotate(-0.6deg); }
+.cb-note-bar{ display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; cursor:grab; }
+.cb-grab{ opacity:.65; font-size:12px; }
+.cb-kebab{ width:24px; height:24px; border-radius:8px; border:none; background:rgba(0,0,0,.08); cursor:pointer; }
+.cb-note-text{ width:100%; height:calc(100% - 36px); min-height:80px; border:none; outline:none; background:transparent; resize:none; font-size:16px; line-height:1.35; }
+.cb-menu{ position:absolute; right:8px; top:36px; background:#fff; border:1px solid #E5E7EB; border-radius:10px; box-shadow:0 10px 30px rgba(0,0,0,.15); padding:10px; width:260px; z-index:9999; }
+.cb-menu-title{ font-size:12px; color:#475569; margin:8px 0 4px; }
+.cb-row{ display:flex; gap:6px; flex-wrap:wrap; }
+.cb-col{ display:flex; flex-direction:column; gap:6px; }
+.cb-swatch{ width:22px; height:22px; border-radius:6px; border:1px solid rgba(0,0,0,.1); cursor:pointer; }
+.cb-select, .cb-btn{ padding:8px; border:1px solid #E5E7EB; border-radius:8px; background:#fff; cursor:pointer; }
+.cb-select{ width:100%; }
+.cb-btn{ width:100%; }
+.cb-btn.danger{ background:#fee2e2; border-color:#fecaca; }
+.cb-resize{ position:absolute; width:16px; height:16px; right:6px; bottom:6px; border-radius:4px; cursor:se-resize; background:rgba(0,0,0,.15); box-shadow: inset -2px -2px 0 rgba(255,255,255,.6); }
+.cb-image-wrap{ position:relative; margin:0 0 10px 0; border-radius:8px; overflow:hidden; max-width:100%; min-width:120px; min-height:80px; display:block; }
+.cb-note-image{ display:block; object-fit:contain; border-radius:8px; border:1px solid rgba(0,0,0,.08); background:rgba(255,255,255,.35); }
+.cb-image-resize{ position:absolute; width:14px; height:14px; right:6px; bottom:6px; border-radius:4px; cursor:se-resize; background:rgba(0,0,0,.22); box-shadow: inset -2px -2px 0 rgba(255,255,255,.55); }
+.cb-size-row{ display:flex; align-items:center; gap:8px; }
+.cb-range{ flex:1; }
+
+.cb-pop{ position:absolute; margin-top:8px; background:#fff; border:1px solid #E5E7EB; border-radius:10px; box-shadow:0 10px 30px rgba(0,0,0,.15); padding:6px; z-index:9999; }
+.cb-pop-item{ display:flex; align-items:center; gap:8px; padding:8px 10px; border:none; background:#fff; cursor:pointer; border-radius:8px; width:100%; text-align:left; }
+.cb-pop-item:hover{ background:#F8FAFC; }
+.cb-pop-item.active{ background:#E0F2FE; }
+.cb-themewrap,.cb-movewrap,.cb-templatewrap{ position:relative; }
+.cb-theme-dot{ width:14px; height:14px; border-radius:999px; border:1px solid rgba(0,0,0,.15); }
+
+.cb-backdrop{ position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.25); z-index:10000; }
+.cb-modal{ position:relative; background:#fff; width:380px; max-width:92vw; border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,.2); padding:20px; z-index:10001; }
+.cb-close{ position:absolute; top:10px; right:10px; border:none; background:transparent; font-size:20px; cursor:pointer; color:#64748B; }
+.cb-title{ margin:0 0 10px 0; }
+.cb-field{ display:flex; flex-direction:column; gap:6px; margin:8px 0; }
+.cb-field > span{ font-size:12px; color:#64748B; }
+.cb-field input{ padding:10px; border:1px solid #E5E7EB; border-radius:10px; }
+.cb-remember{ display:flex; align-items:center; gap:8px; font-size:12px; color:#64748B; }
+.cb-primary{ background:var(--primary); color:#fff; border:1px solid transparent; border-radius:10px; padding:10px 12px; font-weight:600; }
+.cb-msg{ color:#64748B; font-size:12px; margin-top:6px; }
+.cb-link{ margin-top:8px; border:none; background:transparent; color:var(--primary); cursor:pointer; align-self:flex-start; }
+
+@media (max-width: 720px){
+  .cb-top{ padding:10px 12px; height:auto; min-height:64px; align-items:flex-start; }
+  .cb-actions{ width:100%; }
+}
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script type="text/babel">
+const { useEffect, useMemo, useRef, useState } = React;
+
+const COLORS = ["#FFD54F", "#FFAB91", "#A5D6A7", "#90CAF9", "#F48FB1", "#CE93D8", "#FFF59D"];
+const FONTS = [
+  { label: "Manuscrita", value: "'Indie Flower', cursive" },
+  { label: "Serif", value: "'Times New Roman', serif" },
+  { label: "Sans", value: "Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif" },
+  { label: "Mono", value: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" },
+];
+const THEMES = [
+  { id: "cork", name: "Corcho", background: "radial-gradient(circle at 30% 30%, #d4b08a 0%, #c49a6c 40%, #b4885b 100%)", border: "#A57D4C" },
+  { id: "green", name: "Pizarra verde", background: "#2E7D32", border: "#1B5E20" },
+  { id: "blue", name: "Azul", background: "linear-gradient(180deg, #0EA5E9 0%, #0284C7 100%)", border: "#0369A1" },
+  { id: "light", name: "Claro", background: "#E2E8F0", border: "#CBD5E1" },
+  { id: "dark", name: "Oscuro", background: "#111827", border: "#0B1220" },
+  { id: "yellow", name: "Amarillo", background: "#FFF176", border: "#FBC02D" },
+  { id: "pink", name: "Rosa", background: "#F8BBD0", border: "#F48FB1" },
+];
+const LS_KEY = "corknotes_v2_canvas";
+
+function uid() { return (Date.now().toString(36) + Math.random().toString(36).slice(2, 7)).toUpperCase(); }
+function safeParse(json) { try { return json ? JSON.parse(json) : {}; } catch { return {}; } }
+function loadStore() { return safeParse(localStorage.getItem(LS_KEY)); }
+function saveStore(s) { localStorage.setItem(LS_KEY, JSON.stringify(s)); }
+function ensureUserSpace(store, email) {
+  if (!store.dataByUser) store.dataByUser = {};
+  if (!store.dataByUser[email]) {
+    store.dataByUser[email] = {
+      boards: [{ id: uid(), name: "Mi primera pizarra", theme: "cork" }],
+      notes: [],
+      currentBoardId: null,
+    };
+  } else {
+    store.dataByUser[email].boards = (store.dataByUser[email].boards || []).map((b) => ({ theme: "cork", ...b }));
+  }
+}
+function getThemeCss(themeId){ return THEMES.find(t => t.id === themeId) || THEMES[0]; }
+
+function Modal({ open, onClose, title, children }) {
+  if (!open) return null;
+  return (
+    <div className="cb-backdrop" onClick={(e)=>{ if(e.currentTarget===e.target) onClose(); }}>
+      <div className="cb-modal" role="dialog" aria-modal="true" onClick={(e)=> e.stopPropagation()}>
+        <button className="cb-close" aria-label="Cerrar" onClick={onClose}>×</button>
+        {title && <h2 className="cb-title">{title}</h2>}
+        {children}
+      </div>
+    </div>
+  );
+}
+function Field({ label, children }) {
+  return <label className="cb-field"><span>{label}</span>{children}</label>;
+}
+
+function AuthModal({ open, onClose, onLogged }) {
+  const [mode, setMode] = useState("login");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    setMode("login");
+    setMsg("");
+    const s = loadStore();
+    const r = s.remember || {};
+    setEmail(r.email || "");
+    setPassword(r.password || "");
+    setRemember(!!r.email);
+  }, [open]);
+
+  function handleLogin() {
+    const s = loadStore();
+    const users = s.users || [];
+    const u = users.find((x) => x.email?.toLowerCase() === email.toLowerCase());
+    if (!u || u.password !== password) { setMsg("Credenciales inválidas"); return; }
+    ensureUserSpace(s, u.email);
+    s.sessions = { currentEmail: u.email };
+    s.remember = remember ? { email, password } : {};
+    saveStore(s);
+    onLogged(u.email);
+  }
+  function handleRegister() {
+    if (!name || !email || !password) { setMsg("Completa todos los campos"); return; }
+    const s = loadStore();
+    const users = s.users || [];
+    if (users.some((x) => x.email?.toLowerCase() === email.toLowerCase())) { setMsg("Email ya registrado"); return; }
+    users.push({ name, email, password });
+    s.users = users;
+    ensureUserSpace(s, email);
+    s.sessions = { currentEmail: email };
+    s.remember = remember ? { email, password } : {};
+    saveStore(s);
+    onLogged(email);
+  }
+  function handleForgot() {
+    const s = loadStore();
+    const u = (s.users || []).find((x) => x.email?.toLowerCase() === email.toLowerCase());
+    if (!u) { setMsg("Usuario no registrado"); return; }
+    setMsg(`Te enviamos un correo (simulado). Tu contraseña es: ${u.password}`);
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title={mode === "login" ? "Iniciar sesión" : mode === "register" ? "Crear cuenta" : "Recuperar contraseña"}>
+      <div>
+        {mode === "register" && (
+          <Field label="Nombre"><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Tu nombre" /></Field>
+        )}
+        <Field label="Correo"><input type="email" autoFocus value={email} onChange={(e) => setEmail(e.target.value)} placeholder="tucorreo@dominio.com" /></Field>
+        {mode !== "forgot" && (
+          <Field label="Contraseña"><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" /></Field>
+        )}
+        {mode !== "forgot" && (
+          <label className="cb-remember"><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} /> Recordarme</label>
+        )}
+        {msg && <div className="cb-msg">{msg}</div>}
+        <div className="cb-row">
+          {mode === "login" && <><button className="cb-primary" type="button" onClick={handleLogin}>Ingresar</button><button type="button" onClick={() => setMode("register")}>Registrarse</button></>}
+          {mode === "register" && <><button className="cb-primary" type="button" onClick={handleRegister}>Crear cuenta</button><button type="button" onClick={() => setMode("login")}>Volver</button></>}
+          {mode === "forgot" && <><button className="cb-primary" type="button" onClick={handleForgot}>Enviar</button><button type="button" onClick={() => setMode("login")}>Volver</button></>}
+        </div>
+        {mode !== "forgot" && <button className="cb-link" type="button" onClick={() => setMode("forgot")}>Olvidé mi contraseña</button>}
+      </div>
+    </Modal>
+  );
+}
+
+function BoardModal({ open, mode, name, onName, onConfirm, onClose }) {
+  const title = mode === 'create' ? 'Nueva pizarra' : mode === 'rename' ? 'Renombrar pizarra' : 'Eliminar pizarra';
+  return (
+    <Modal open={open} onClose={onClose} title={title}>
+      {mode === 'delete' ? (
+        <div>
+          <div className="cb-msg">¿Seguro que deseas eliminar esta pizarra y sus notas?</div>
+          <div className="cb-row"><button className="cb-primary" type="button" onClick={onConfirm}>Sí, eliminar</button><button type="button" onClick={onClose}>Cancelar</button></div>
+        </div>
+      ) : (
+        <div>
+          <Field label="Nombre de la pizarra"><input value={name} onChange={(e)=> onName(e.target.value)} placeholder="Ej: Ideas 2025" /></Field>
+          <div className="cb-row"><button className="cb-primary" type="button" onClick={onConfirm}>{mode === 'create' ? 'Crear' : 'Renombrar'}</button><button type="button" onClick={onClose}>Cancelar</button></div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+function Tabs({ boards, activeId, onSelect, onCreate, onRename, onDelete }) {
+  return (
+    <div className="cb-tabs" role="tablist" aria-label="Pizarras">
+      {boards.map((b) => (
+        <div key={b.id} role="tab" aria-selected={activeId === b.id} tabIndex={0} className={"cb-tab " + (activeId === b.id ? "active" : "")} onClick={() => onSelect(b.id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(b.id); } }} title={b.name}>
+          <span className="cb-tab-name">{b.name}</span>
+          {activeId === b.id && (
+            <span className="cb-tab-ops" onClick={(e) => e.stopPropagation()}>
+              <button className="cb-mini" type="button" onClick={() => onRename(b)} title="Renombrar">✎</button>
+              <button className="cb-mini" type="button" onClick={() => onDelete(b)} title="Eliminar">🗑</button>
+            </span>
+          )}
+        </div>
+      ))}
+      <div className="cb-tab" role="button" tabIndex={0} onClick={onCreate} onKeyDown={(e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); onCreate(); } }}>+ Nueva pizarra</div>
+    </div>
+  );
+}
+
+function BoardThemeButton({ themeId, onChange }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="cb-themewrap">
+      <button type="button" className="cb-action" onClick={()=> setOpen(v=>!v)} title="Cambiar color de pizarra">🎨 Pizarra</button>
+      {open && (
+        <div className="cb-pop" onMouseLeave={()=> setOpen(false)}>
+          {THEMES.map(t => (
+            <button key={t.id} className={"cb-pop-item" + (t.id===themeId?" active":"")} type="button" onClick={()=> { onChange(t.id); setOpen(false); }}>
+              <span className="cb-theme-dot" style={{ background: t.background }} />{t.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BoardTemplateButton({ onApply }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="cb-templatewrap">
+      <button type="button" className="cb-action" onClick={()=> setOpen(v=>!v)} title="Plantillas de trabajo">📋 Plantillas</button>
+      {open && (
+        <div className="cb-pop" onMouseLeave={()=> setOpen(false)}>
+          <button className="cb-pop-item" type="button" onClick={()=> { onApply('scrum'); setOpen(false); }}>Scrum</button>
+          <button className="cb-pop-item" type="button" onClick={()=> { onApply('kanban'); setOpen(false); }}>Kanban</button>
+          <button className="cb-pop-item" type="button" onClick={()=> { onApply(null); setOpen(false); }}>Sin plantilla</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BoardTemplateOverlay({ type }) {
+  if (!type) return null;
+  const columns = type === 'scrum'
+    ? ['Stories', 'To do', 'In progress', 'Test', 'Done']
+    : ['Por hacer', 'En progreso', 'Bloqueado', 'Terminado'];
+  return (
+    <div className="cb-board-template">
+      <div className="cb-board-template-grid" style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(170px, 1fr))` }}>
+        {columns.map((name) => (
+          <div className="cb-board-column" key={name}>
+            <div className="cb-board-column-title">{name}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Note({ note, onChange, onDuplicate, onDelete, onMove, onBringToFront }) {
+  const ref = useRef(null);
+  const imageWrapRef = useRef(null);
+  const [menu, setMenu] = useState(false);
+  const [drag, setDrag] = useState(null);
+  const [resize, setResize] = useState(null);
+  const [imgResize, setImgResize] = useState(null);
+
+  useEffect(() => {
+    function onUp(){
+      if (drag) savePos();
+      if (resize) saveSize();
+      if (imgResize) saveImageSize();
+      setDrag(null); setResize(null); setImgResize(null);
+    }
+    function onMoveEvt(e){
+      if (drag && ref.current){
+        const box = ref.current.parentElement.getBoundingClientRect();
+        const nx = e.clientX - box.left - drag.dx;
+        const ny = e.clientY - box.top - drag.dy;
+        ref.current.style.left = nx + 'px';
+        ref.current.style.top  = ny + 'px';
+      }
+      if (resize && ref.current){
+        const dw = Math.max(200, resize.startW + (e.clientX - resize.startX));
+        const dh = Math.max(120, resize.startH + (e.clientY - resize.startY));
+        ref.current.style.width = dw + 'px';
+        ref.current.style.height = dh + 'px';
+      }
+      if (imgResize && ref.current){
+        const noteBox = ref.current.getBoundingClientRect();
+        const padX = 24; // 12px + 12px
+        const chromeH = 110; // barra + textarea mínima + márgenes
+        const maxW = Math.max(120, noteBox.width - padX);
+        const maxH = Math.max(80, noteBox.height - chromeH);
+        const nextW = Math.max(120, Math.min(maxW, imgResize.startW + (e.clientX - imgResize.startX)));
+        const nextH = Math.max(80, Math.min(maxH, imgResize.startH + (e.clientY - imgResize.startY)));
+        onChange({ imageW: nextW, imageH: nextH });
+      }
+    }
+    window.addEventListener('mouseup', onUp);
+    window.addEventListener('mousemove', onMoveEvt);
+    return () => {
+      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('mousemove', onMoveEvt);
+    };
+  }, [drag, resize, imgResize]);
+
+  function startDrag(e){
+    const r = ref.current.getBoundingClientRect();
+    setDrag({ dx: e.clientX - r.left, dy: e.clientY - r.top });
+    onBringToFront();
+  }
+  function startResize(e){
+    e.stopPropagation();
+    const cs = getComputedStyle(ref.current);
+    const startW = parseFloat(cs.width) || (note.w || 240);
+    const startH = parseFloat(cs.height) || (note.h || 160);
+    setResize({ startW, startH, startX: e.clientX, startY: e.clientY });
+    onBringToFront();
+  }
+  function startImageResize(e){
+    e.stopPropagation();
+    onBringToFront();
+    const rect = imageWrapRef.current ? imageWrapRef.current.getBoundingClientRect() : { width: note.imageW || 180, height: note.imageH || 120 };
+    setImgResize({ startW: rect.width, startH: rect.height, startX: e.clientX, startY: e.clientY });
+  }
+  function savePos(){
+    if (!ref.current) return;
+    const cs = getComputedStyle(ref.current);
+    let x = parseFloat(cs.left), y = parseFloat(cs.top);
+    if (Number.isNaN(x)) x = 0;
+    if (Number.isNaN(y)) y = 0;
+    onChange({ x, y });
+  }
+  function saveSize(){
+    if (!ref.current) return;
+    const cs = getComputedStyle(ref.current);
+    let w = parseFloat(cs.width), h = parseFloat(cs.height);
+    if (Number.isNaN(w)) w = note.w || 240;
+    if (Number.isNaN(h)) h = note.h || 160;
+    onChange({ w, h });
+  }
+  function saveImageSize(){
+    if (!imageWrapRef.current) return;
+    const cs = getComputedStyle(imageWrapRef.current);
+    let w = parseFloat(cs.width), h = parseFloat(cs.height);
+    if (Number.isNaN(w)) w = note.imageW || 180;
+    if (Number.isNaN(h)) h = note.imageH || 120;
+    onChange({ imageW: w, imageH: h });
+  }
+  function handlePaste(e){
+    const items = (e.clipboardData && e.clipboardData.items) || [];
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (!file) continue;
+        const reader = new FileReader();
+        reader.onload = () => {
+          onChange({ image: String(reader.result || ''), imageW: note.imageW || 180, imageH: note.imageH || 120 });
+        };
+        reader.readAsDataURL(file);
+        e.preventDefault();
+        onBringToFront();
+        return;
+      }
+    }
+  }
+
+  const w = note.w || 240;
+  const h = note.h || 160;
+  const fontPx = note.fontSize || 16;
+  const imageW = note.imageW || 180;
+  const imageH = note.imageH || 120;
+  const textHeight = note.image ? `calc(100% - 36px - ${imageH + 10}px)` : 'calc(100% - 36px)';
+
+  return (
+    <div ref={ref} className="cb-note" style={{ left: note.x, top: note.y, zIndex: note.z||1, background: note.color, fontFamily: note.font, width: w, height: h }} onMouseDown={onBringToFront} onPaste={handlePaste}>
+      <div className="cb-note-bar" onMouseDown={startDrag} title="Arrastra"><span className="cb-grab">☰</span><button className="cb-kebab" type="button" onClick={() => { onBringToFront(); setMenu(v => !v); }}>⋯</button></div>
+      {note.image && (
+        <div ref={imageWrapRef} className="cb-image-wrap" style={{ width: imageW, height: imageH }} onMouseDown={onBringToFront}>
+          <img src={note.image} alt="Imagen pegada" className="cb-note-image" style={{ width: '100%', height: '100%' }} />
+          <div className="cb-image-resize" onMouseDown={startImageResize} title="Redimensionar imagen" />
+        </div>
+      )}
+      <textarea className="cb-note-text" style={{ fontSize: fontPx + 'px', height: textHeight }} value={note.text} onFocus={onBringToFront} onPaste={handlePaste} placeholder={note.image ? 'Puedes seguir escribiendo debajo de la imagen...' : 'Escribe aquí o pega una imagen con Ctrl+V...'} onChange={(e) => onChange({ text: e.target.value })} />
+      <div className="cb-resize" onMouseDown={startResize} title="Redimensionar nota" />
+      {menu && (
+        <div className="cb-menu" onMouseLeave={() => setMenu(false)}>
+          <div className="cb-menu-sec"><div className="cb-menu-title">Color</div><div className="cb-row">{COLORS.map(c => <div key={c} className="cb-swatch" style={{background:c}} onClick={() => onChange({ color:c })} />)}</div></div>
+          <div className="cb-menu-sec"><div className="cb-menu-title">Fuente</div><select className="cb-select" value={note.font} onChange={(e)=> onChange({ font: e.target.value })}>{FONTS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}</select></div>
+          <div className="cb-menu-sec"><div className="cb-menu-title">Tamaño de letra</div><div className="cb-size-row"><button className="cb-btn" type="button" onClick={()=> onChange({ fontSize: Math.max(10, (note.fontSize||16) - 2) })}>−</button><input className="cb-range" type="range" min={10} max={28} value={fontPx} onChange={(e)=> onChange({ fontSize: parseInt(e.target.value, 10) })} /><button className="cb-btn" type="button" onClick={()=> onChange({ fontSize: Math.min(28, (note.fontSize||16) + 2) })}>+</button></div></div>
+          <div className="cb-menu-sec"><div className="cb-menu-title">Imagen</div><div className="cb-msg">Pega una imagen desde el portapapeles con Ctrl+V dentro de la nota.</div>{note.image && <button className="cb-btn danger" type="button" onClick={()=> onChange({ image: null })}>Quitar imagen</button>}</div>
+          <div className="cb-menu-sec"><div className="cb-col"><button className="cb-btn" type="button" onClick={onDuplicate}>Duplicar</button><MoveButton noteId={note.id} onMove={onMove} /><button className="cb-btn danger" type="button" onClick={onDelete}>Borrar</button></div></div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MoveButton({ noteId, onMove }) {
+  const [open, setOpen] = useState(false);
+  const [boards, setBoards] = useState([]);
+  useEffect(() => {
+    const s = loadStore();
+    const email = s?.sessions?.currentEmail;
+    if (!email) return;
+    setBoards(s?.dataByUser?.[email]?.boards || []);
+  }, []);
+  return (
+    <div className="cb-movewrap">
+      <button className="cb-btn" type="button" onClick={()=> setOpen(v=>!v)}>Mover a otra pizarra</button>
+      {open && (
+        <div className="cb-pop">
+          {boards.map(b => (
+            <button key={b.id} className="cb-pop-item" type="button" onClick={()=> { onMove(noteId, b.id); setOpen(false); }}>{b.name}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function App(){
+  const [email, setEmail] = useState(() => loadStore()?.sessions?.currentEmail || "");
+  const [showAuth, setShowAuth] = useState(!email);
+  const [space, setSpace] = useState(() => {
+    const s = loadStore();
+    if (email) { ensureUserSpace(s, email); saveStore(s); return s.dataByUser[email]; }
+    return null;
+  });
+  const boards = space?.boards || [];
+  const activeId = space?.currentBoardId || boards[0]?.id || null;
+  const activeBoard = useMemo(() => boards.find((b) => b.id === activeId), [boards, activeId]);
+  const userName = useMemo(() => {
+    if (!email) return "";
+    const s = loadStore();
+    const u = (s.users || []).find((x) => x.email === email);
+    return u?.name || "Usuario";
+  }, [email]);
+
+  const [bdOpen, setBdOpen] = useState(false);
+  const [bdMode, setBdMode] = useState('create');
+  const [bdName, setBdName] = useState('');
+  const bdTarget = useRef(null);
+
+  useEffect(() => {
+    const s = loadStore();
+    if (!email) { setSpace(null); return; }
+    ensureUserSpace(s, email);
+    if (!s.dataByUser[email].currentBoardId) s.dataByUser[email].currentBoardId = s.dataByUser[email].boards[0]?.id || null;
+    saveStore(s);
+    setSpace({ ...s.dataByUser[email] });
+  }, [email]);
+
+  const notes = useMemo(() => {
+    if (!space) return [];
+    return (space.notes || []).filter((n) => n.board_id === activeId).sort((a,b)=>(a.z||1)-(b.z||1));
+  }, [space, activeId]);
+
+  function commitSpace(mutator) {
+    const s = loadStore();
+    ensureUserSpace(s, email);
+    const draft = JSON.parse(JSON.stringify(s.dataByUser[email]));
+    mutator(draft);
+    s.dataByUser[email] = draft;
+    saveStore(s);
+    setSpace(draft);
+  }
+  function bringToFront(id) {
+    commitSpace((x) => {
+      const inBoard = (x.notes||[]).filter((n) => n.board_id === activeId);
+      const maxZ = inBoard.reduce((m,n)=> Math.max(m, n.z||1), 1);
+      const i = x.notes.findIndex((n) => n.id === id);
+      if (i >= 0) x.notes[i].z = maxZ + 1;
+    });
+  }
+  function addNote() {
+    if (!email || !activeId) return;
+    commitSpace((x) => {
+      const ns = x.notes || (x.notes = []);
+      const inBoard = ns.filter((n) => n.board_id === activeId);
+      const maxZ = inBoard.reduce((m,n)=> Math.max(m, n.z||1), 1);
+      ns.push({ id: uid(), board_id: activeId, text: "Nueva nota", color: COLORS[0], font: FONTS[0].value, x: 80 + Math.random()*120, y: 80 + Math.random()*80, z: maxZ + 1, w: 240, h: 160, fontSize: 16 });
+    });
+  }
+  function updateNote(id, patch) { commitSpace((x) => { const i = x.notes.findIndex((n)=>n.id===id); if (i>=0) x.notes[i] = { ...x.notes[i], ...patch }; }); }
+  function duplicateNote(id) {
+    commitSpace((x) => {
+      const ns = x.notes; const n = ns.find((q) => q.id === id); if (!n) return;
+      const inBoard = ns.filter((q)=> q.board_id===n.board_id);
+      const maxZ = inBoard.reduce((m,q)=> Math.max(m, q.z||1), 1);
+      ns.push({ ...n, id: uid(), x: n.x + 24, y: n.y + 18, z: maxZ + 1 });
+    });
+  }
+  function deleteNote(id) { commitSpace((x) => { x.notes = x.notes.filter((n) => n.id !== id); }); }
+  function moveNote(id, boardId) { commitSpace((x) => { const i = x.notes.findIndex((n)=>n.id===id); if(i>=0){ x.notes[i].board_id = boardId; x.notes[i].z = 1; } }); }
+
+  function openCreate(){ setBdMode('create'); setBdName(''); bdTarget.current = null; setBdOpen(true); }
+  function openRename(b){ setBdMode('rename'); setBdName(b.name); bdTarget.current = b; setBdOpen(true); }
+  function openDelete(b){ setBdMode('delete'); setBdName(b.name); bdTarget.current = b; setBdOpen(true); }
+  function confirmBoard(){
+    if (bdMode === 'create') {
+      if (!bdName.trim()) return;
+      commitSpace((x) => { x.boards.push({ id: uid(), name: bdName.trim(), theme: 'cork' }); x.currentBoardId = x.boards[x.boards.length - 1].id; });
+      setBdOpen(false); return;
+    }
+    if (bdMode === 'rename') {
+      if (!bdName.trim()) return; const target = bdTarget.current; if (!target) return;
+      commitSpace((x) => { const i = x.boards.findIndex((q)=>q.id===target.id); if(i>=0) x.boards[i].name = bdName.trim(); });
+      setBdOpen(false); return;
+    }
+    if (bdMode === 'delete') {
+      const target = bdTarget.current; if (!target) return;
+      commitSpace((x) => { x.boards = x.boards.filter((q)=>q.id!==target.id); x.notes = x.notes.filter((n)=>n.board_id!==target.id); if (x.currentBoardId === target.id) x.currentBoardId = x.boards[0]?.id || null; });
+      setBdOpen(false); return;
+    }
+  }
+  function selectBoard(id) { commitSpace((x) => { x.currentBoardId = id; }); }
+  function changeBoardTheme(id) { if (!activeId) return; commitSpace((x)=>{ const i = x.boards.findIndex((b)=>b.id===activeId); if(i>=0) x.boards[i].theme = id; }); }
+  function applyTemplate(type) {
+    if (!email || !activeId) return;
+    commitSpace((x) => {
+      const i = x.boards.findIndex((b) => b.id === activeId);
+      if (i >= 0) x.boards[i].template = type;
+    });
+  }
+  function logout() { const s = loadStore(); s.sessions = { currentEmail: "" }; saveStore(s); setEmail(""); setShowAuth(true); }
+  function onLogged(em) { setEmail(em); setShowAuth(false); }
+
+  const flipKey = `flip-${activeId}`;
+  const themeCss = getThemeCss(activeBoard?.theme);
+
+  return (
+    <div className="cb-app">
+      <header className="cb-top">
+        <div className="cb-brand">Cork<span>Board</span></div>
+        <div className="cb-actions">
+          {email ? (
+            <>
+              <span className="cb-hello">Hola, {userName}</span>
+              <button type="button" className="cb-action" onClick={addNote}>+ Nota</button>
+              <BoardThemeButton themeId={activeBoard?.theme} onChange={changeBoardTheme} />
+              <BoardTemplateButton onApply={applyTemplate} />
+              <button type="button" className="cb-action" onClick={logout}>Cerrar sesión</button>
+            </>
+          ) : (
+            <button type="button" className="cb-action" onClick={()=> setShowAuth(true)}>Iniciar sesión</button>
+          )}
+        </div>
+      </header>
+
+      <main className="cb-main">
+        {!email ? (
+          <div className="cb-empty">Inicia sesión para ver tus pizarras y notas.</div>
+        ) : !activeId ? (
+          <div className="cb-empty">No tienes pizarras. Crea una abajo.</div>
+        ) : (
+          <div className="cb-stage">
+            <div key={flipKey} className="cb-cork flip" style={{ background: themeCss.background, borderColor: themeCss.border }}>
+              <BoardTemplateOverlay type={activeBoard?.template} />
+              {notes.map(n => (
+                <Note key={n.id} note={n} onChange={(p)=> updateNote(n.id, p)} onDuplicate={()=> duplicateNote(n.id)} onDelete={()=> deleteNote(n.id)} onMove={moveNote} onBringToFront={()=> bringToFront(n.id)} />
+              ))}
+            </div>
+          </div>
+        )}
+      </main>
+
+      <footer className="cb-bottom">
+        {email && <Tabs boards={boards} activeId={activeId} onSelect={selectBoard} onCreate={openCreate} onRename={openRename} onDelete={openDelete} />}
+      </footer>
+
+      <BoardModal open={bdOpen} mode={bdMode} name={bdName} onName={setBdName} onConfirm={confirmBoard} onClose={()=> setBdOpen(false)} />
+      <AuthModal open={showAuth} onClose={()=> setShowAuth(false)} onLogged={onLogged} />
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
