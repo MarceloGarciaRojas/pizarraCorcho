@@ -18,7 +18,6 @@ body{ margin:0; font-family:Inter, system-ui, -apple-system, Segoe UI, Roboto, A
 .cb-brand{ font-weight:800; letter-spacing:.3px; white-space:nowrap; }
 .cb-brand span{ color:var(--primary); }
 .cb-actions{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
-.cb-hello{ color:#64748B; align-self:center; padding:8px 0; margin-right:8px; }
 .cb-action{ padding:8px 12px; border:1px solid #E5E7EB; background:#fff; border-radius:10px; cursor:pointer; }
 .cb-action:hover{ filter:brightness(1.05); }
 
@@ -80,10 +79,8 @@ body{ margin:0; font-family:Inter, system-ui, -apple-system, Segoe UI, Roboto, A
 .cb-field{ display:flex; flex-direction:column; gap:6px; margin:8px 0; }
 .cb-field > span{ font-size:12px; color:#64748B; }
 .cb-field input{ padding:10px; border:1px solid #E5E7EB; border-radius:10px; }
-.cb-remember{ display:flex; align-items:center; gap:8px; font-size:12px; color:#64748B; }
 .cb-primary{ background:var(--primary); color:#fff; border:1px solid transparent; border-radius:10px; padding:10px 12px; font-weight:600; }
 .cb-msg{ color:#64748B; font-size:12px; margin-top:6px; }
-.cb-link{ margin-top:8px; border:none; background:transparent; color:var(--primary); cursor:pointer; align-self:flex-start; }
 
 @media (max-width: 720px){
   .cb-top{ padding:10px 12px; height:auto; min-height:64px; align-items:flex-start; }
@@ -123,17 +120,51 @@ function uid() { return (Date.now().toString(36) + Math.random().toString(36).sl
 function safeParse(json) { try { return json ? JSON.parse(json) : {}; } catch { return {}; } }
 function loadStore() { return safeParse(localStorage.getItem(LS_KEY)); }
 function saveStore(s) { localStorage.setItem(LS_KEY, JSON.stringify(s)); }
-function ensureUserSpace(store, email) {
-  if (!store.dataByUser) store.dataByUser = {};
-  if (!store.dataByUser[email]) {
-    store.dataByUser[email] = {
-      boards: [{ id: uid(), name: "Mi primera pizarra", theme: "cork" }],
-      notes: [],
-      currentBoardId: null,
-    };
-  } else {
-    store.dataByUser[email].boards = (store.dataByUser[email].boards || []).map((b) => ({ theme: "cork", ...b }));
+// One local workspace per browser. Migrate existing boards once, without login.
+function loadWorkspace() {
+  const store = loadStore();
+  if (!store.workspace) {
+    const entries = Object.entries(store.dataByUser || {});
+    const workspace = { boards: [], notes: [], currentBoardId: null };
+    const boardIds = new Set();
+    const noteIds = new Set();
+    for (const [owner, space] of entries) {
+      const boardMap = new Map();
+      for (const board of space.boards || []) {
+        let id = board.id;
+        while (!id || boardIds.has(id)) id = uid();
+        boardIds.add(id);
+        boardMap.set(board.id, id);
+        workspace.boards.push({ theme: 'cork', ...board, id });
+      }
+      for (const note of space.notes || []) {
+        let id = note.id;
+        while (!id || noteIds.has(id)) id = uid();
+        noteIds.add(id);
+        workspace.notes.push({ ...note, id, board_id: boardMap.get(note.board_id) || note.board_id });
+      }
+      if (owner === store.sessions?.currentEmail) {
+        workspace.currentBoardId = boardMap.get(space.currentBoardId) || null;
+      }
+    }
+    if (!entries.length) {
+      workspace.boards.push({ id: uid(), name: 'Mi primera pizarra', theme: 'cork' });
+    }
+    workspace.currentBoardId = workspace.currentBoardId || workspace.boards[0]?.id || null;
+    store.workspace = workspace;
   }
+  // Move the data instead of duplicating images within the localStorage quota.
+  delete store.dataByUser;
+  delete store.users;
+  delete store.sessions;
+  delete store.remember;
+  saveStore(store);
+  return store.workspace;
+}
+function saveWorkspace(workspace) {
+  const store = loadStore();
+  store.workspace = workspace;
+  saveStore(store);
 }
 function getThemeCss(themeId){ return THEMES.find(t => t.id === themeId) || THEMES[0]; }
 
@@ -151,81 +182,6 @@ function Modal({ open, onClose, title, children }) {
 }
 function Field({ label, children }) {
   return <label className="cb-field"><span>{label}</span>{children}</label>;
-}
-
-function AuthModal({ open, onClose, onLogged }) {
-  const [mode, setMode] = useState("login");
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [remember, setRemember] = useState(false);
-  const [msg, setMsg] = useState("");
-
-  useEffect(() => {
-    if (!open) return;
-    setMode("login");
-    setMsg("");
-    const s = loadStore();
-    const r = s.remember || {};
-    setEmail(r.email || "");
-    setPassword(r.password || "");
-    setRemember(!!r.email);
-  }, [open]);
-
-  function handleLogin() {
-    const s = loadStore();
-    const users = s.users || [];
-    const u = users.find((x) => x.email?.toLowerCase() === email.toLowerCase());
-    if (!u || u.password !== password) { setMsg("Credenciales inválidas"); return; }
-    ensureUserSpace(s, u.email);
-    s.sessions = { currentEmail: u.email };
-    s.remember = remember ? { email, password } : {};
-    saveStore(s);
-    onLogged(u.email);
-  }
-  function handleRegister() {
-    if (!name || !email || !password) { setMsg("Completa todos los campos"); return; }
-    const s = loadStore();
-    const users = s.users || [];
-    if (users.some((x) => x.email?.toLowerCase() === email.toLowerCase())) { setMsg("Email ya registrado"); return; }
-    users.push({ name, email, password });
-    s.users = users;
-    ensureUserSpace(s, email);
-    s.sessions = { currentEmail: email };
-    s.remember = remember ? { email, password } : {};
-    saveStore(s);
-    onLogged(email);
-  }
-  function handleForgot() {
-    const s = loadStore();
-    const u = (s.users || []).find((x) => x.email?.toLowerCase() === email.toLowerCase());
-    if (!u) { setMsg("Usuario no registrado"); return; }
-    setMsg(`Te enviamos un correo (simulado). Tu contraseña es: ${u.password}`);
-  }
-
-  return (
-    <Modal open={open} onClose={onClose} title={mode === "login" ? "Iniciar sesión" : mode === "register" ? "Crear cuenta" : "Recuperar contraseña"}>
-      <div>
-        {mode === "register" && (
-          <Field label="Nombre"><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Tu nombre" /></Field>
-        )}
-        <Field label="Correo"><input type="email" autoFocus value={email} onChange={(e) => setEmail(e.target.value)} placeholder="tucorreo@dominio.com" /></Field>
-        {mode !== "forgot" && (
-          <Field label="Contraseña"><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" /></Field>
-        )}
-        {mode !== "forgot" && (
-          <label className="cb-remember"><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} /> Recordarme</label>
-        )}
-        {msg && <div className="cb-msg">{msg}</div>}
-        <div className="cb-row">
-          {mode === "login" && <><button className="cb-primary" type="button" onClick={handleLogin}>Ingresar</button><button type="button" onClick={() => setMode("register")}>Registrarse</button></>}
-          {mode === "register" && <><button className="cb-primary" type="button" onClick={handleRegister}>Crear cuenta</button><button type="button" onClick={() => setMode("login")}>Volver</button></>}
-          {mode === "forgot" && <><button className="cb-primary" type="button" onClick={handleForgot}>Enviar</button><button type="button" onClick={() => setMode("login")}>Volver</button></>}
-        </div>
-        {mode !== "forgot" && <button className="cb-link" type="button" onClick={() => setMode("forgot")}>Olvidé mi contraseña</button>}
-      </div>
-    </Modal>
-  );
 }
 
 function BoardModal({ open, mode, name, onName, onConfirm, onClose }) {
@@ -318,7 +274,7 @@ function BoardTemplateOverlay({ type }) {
   );
 }
 
-function Note({ note, onChange, onDuplicate, onDelete, onMove, onBringToFront }) {
+function Note({ note, boards, onChange, onDuplicate, onDelete, onMove, onBringToFront }) {
   const ref = useRef(null);
   const imageWrapRef = useRef(null);
   const [menu, setMenu] = useState(false);
@@ -451,22 +407,15 @@ function Note({ note, onChange, onDuplicate, onDelete, onMove, onBringToFront })
           <div className="cb-menu-sec"><div className="cb-menu-title">Fuente</div><select className="cb-select" value={note.font} onChange={(e)=> onChange({ font: e.target.value })}>{FONTS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}</select></div>
           <div className="cb-menu-sec"><div className="cb-menu-title">Tamaño de letra</div><div className="cb-size-row"><button className="cb-btn" type="button" onClick={()=> onChange({ fontSize: Math.max(10, (note.fontSize||16) - 2) })}>−</button><input className="cb-range" type="range" min={10} max={28} value={fontPx} onChange={(e)=> onChange({ fontSize: parseInt(e.target.value, 10) })} /><button className="cb-btn" type="button" onClick={()=> onChange({ fontSize: Math.min(28, (note.fontSize||16) + 2) })}>+</button></div></div>
           <div className="cb-menu-sec"><div className="cb-menu-title">Imagen</div><div className="cb-msg">Pega una imagen desde el portapapeles con Ctrl+V dentro de la nota.</div>{note.image && <button className="cb-btn danger" type="button" onClick={()=> onChange({ image: null })}>Quitar imagen</button>}</div>
-          <div className="cb-menu-sec"><div className="cb-col"><button className="cb-btn" type="button" onClick={onDuplicate}>Duplicar</button><MoveButton noteId={note.id} onMove={onMove} /><button className="cb-btn danger" type="button" onClick={onDelete}>Borrar</button></div></div>
+          <div className="cb-menu-sec"><div className="cb-col"><button className="cb-btn" type="button" onClick={onDuplicate}>Duplicar</button><MoveButton noteId={note.id} boards={boards} onMove={onMove} /><button className="cb-btn danger" type="button" onClick={onDelete}>Borrar</button></div></div>
         </div>
       )}
     </div>
   );
 }
 
-function MoveButton({ noteId, onMove }) {
+function MoveButton({ noteId, boards, onMove }) {
   const [open, setOpen] = useState(false);
-  const [boards, setBoards] = useState([]);
-  useEffect(() => {
-    const s = loadStore();
-    const email = s?.sessions?.currentEmail;
-    if (!email) return;
-    setBoards(s?.dataByUser?.[email]?.boards || []);
-  }, []);
   return (
     <div className="cb-movewrap">
       <button className="cb-btn" type="button" onClick={()=> setOpen(v=>!v)}>Mover a otra pizarra</button>
@@ -482,36 +431,14 @@ function MoveButton({ noteId, onMove }) {
 }
 
 function App(){
-  const [email, setEmail] = useState(() => loadStore()?.sessions?.currentEmail || "");
-  const [showAuth, setShowAuth] = useState(!email);
-  const [space, setSpace] = useState(() => {
-    const s = loadStore();
-    if (email) { ensureUserSpace(s, email); saveStore(s); return s.dataByUser[email]; }
-    return null;
-  });
+  const [space, setSpace] = useState(loadWorkspace);
   const boards = space?.boards || [];
   const activeId = space?.currentBoardId || boards[0]?.id || null;
   const activeBoard = useMemo(() => boards.find((b) => b.id === activeId), [boards, activeId]);
-  const userName = useMemo(() => {
-    if (!email) return "";
-    const s = loadStore();
-    const u = (s.users || []).find((x) => x.email === email);
-    return u?.name || "Usuario";
-  }, [email]);
-
   const [bdOpen, setBdOpen] = useState(false);
   const [bdMode, setBdMode] = useState('create');
   const [bdName, setBdName] = useState('');
   const bdTarget = useRef(null);
-
-  useEffect(() => {
-    const s = loadStore();
-    if (!email) { setSpace(null); return; }
-    ensureUserSpace(s, email);
-    if (!s.dataByUser[email].currentBoardId) s.dataByUser[email].currentBoardId = s.dataByUser[email].boards[0]?.id || null;
-    saveStore(s);
-    setSpace({ ...s.dataByUser[email] });
-  }, [email]);
 
   const notes = useMemo(() => {
     if (!space) return [];
@@ -519,12 +446,9 @@ function App(){
   }, [space, activeId]);
 
   function commitSpace(mutator) {
-    const s = loadStore();
-    ensureUserSpace(s, email);
-    const draft = JSON.parse(JSON.stringify(s.dataByUser[email]));
+    const draft = JSON.parse(JSON.stringify(loadWorkspace()));
     mutator(draft);
-    s.dataByUser[email] = draft;
-    saveStore(s);
+    saveWorkspace(draft);
     setSpace(draft);
   }
   function bringToFront(id) {
@@ -536,7 +460,7 @@ function App(){
     });
   }
   function addNote() {
-    if (!email || !activeId) return;
+    if (!activeId) return;
     commitSpace((x) => {
       const ns = x.notes || (x.notes = []);
       const inBoard = ns.filter((n) => n.board_id === activeId);
@@ -579,15 +503,12 @@ function App(){
   function selectBoard(id) { commitSpace((x) => { x.currentBoardId = id; }); }
   function changeBoardTheme(id) { if (!activeId) return; commitSpace((x)=>{ const i = x.boards.findIndex((b)=>b.id===activeId); if(i>=0) x.boards[i].theme = id; }); }
   function applyTemplate(type) {
-    if (!email || !activeId) return;
+    if (!activeId) return;
     commitSpace((x) => {
       const i = x.boards.findIndex((b) => b.id === activeId);
       if (i >= 0) x.boards[i].template = type;
     });
   }
-  function logout() { const s = loadStore(); s.sessions = { currentEmail: "" }; saveStore(s); setEmail(""); setShowAuth(true); }
-  function onLogged(em) { setEmail(em); setShowAuth(false); }
-
   const flipKey = `flip-${activeId}`;
   const themeCss = getThemeCss(activeBoard?.theme);
 
@@ -596,31 +517,21 @@ function App(){
       <header className="cb-top">
         <div className="cb-brand">Cork<span>Board</span></div>
         <div className="cb-actions">
-          {email ? (
-            <>
-              <span className="cb-hello">Hola, {userName}</span>
-              <button type="button" className="cb-action" onClick={addNote}>+ Nota</button>
-              <BoardThemeButton themeId={activeBoard?.theme} onChange={changeBoardTheme} />
-              <BoardTemplateButton onApply={applyTemplate} />
-              <button type="button" className="cb-action" onClick={logout}>Cerrar sesión</button>
-            </>
-          ) : (
-            <button type="button" className="cb-action" onClick={()=> setShowAuth(true)}>Iniciar sesión</button>
-          )}
+          <button type="button" className="cb-action" onClick={addNote}>+ Nota</button>
+          <BoardThemeButton themeId={activeBoard?.theme} onChange={changeBoardTheme} />
+          <BoardTemplateButton onApply={applyTemplate} />
         </div>
       </header>
 
       <main className="cb-main">
-        {!email ? (
-          <div className="cb-empty">Inicia sesión para ver tus pizarras y notas.</div>
-        ) : !activeId ? (
+        {!activeId ? (
           <div className="cb-empty">No tienes pizarras. Crea una abajo.</div>
         ) : (
           <div className="cb-stage">
             <div key={flipKey} className="cb-cork flip" style={{ background: themeCss.background, borderColor: themeCss.border }}>
               <BoardTemplateOverlay type={activeBoard?.template} />
               {notes.map(n => (
-                <Note key={n.id} note={n} onChange={(p)=> updateNote(n.id, p)} onDuplicate={()=> duplicateNote(n.id)} onDelete={()=> deleteNote(n.id)} onMove={moveNote} onBringToFront={()=> bringToFront(n.id)} />
+                <Note key={n.id} note={n} boards={boards} onChange={(p)=> updateNote(n.id, p)} onDuplicate={()=> duplicateNote(n.id)} onDelete={()=> deleteNote(n.id)} onMove={moveNote} onBringToFront={()=> bringToFront(n.id)} />
               ))}
             </div>
           </div>
@@ -628,11 +539,10 @@ function App(){
       </main>
 
       <footer className="cb-bottom">
-        {email && <Tabs boards={boards} activeId={activeId} onSelect={selectBoard} onCreate={openCreate} onRename={openRename} onDelete={openDelete} />}
+        <Tabs boards={boards} activeId={activeId} onSelect={selectBoard} onCreate={openCreate} onRename={openRename} onDelete={openDelete} />
       </footer>
 
       <BoardModal open={bdOpen} mode={bdMode} name={bdName} onName={setBdName} onConfirm={confirmBoard} onClose={()=> setBdOpen(false)} />
-      <AuthModal open={showAuth} onClose={()=> setShowAuth(false)} onLogged={onLogged} />
     </div>
   );
 }
